@@ -14,8 +14,16 @@ NULL
 #' @useDynLib yar, .registration = TRUE
 NULL
 
-#' Return string `"Hello world!"` to R.
+ArDoc <- new.env(parent = emptyenv())
+
+ArDoc$new <- function() .Call(wrap__ArDoc__new)
+
+ArDoc$client_id <- function() .Call(wrap__ArDoc__client_id, self)
+
 #' @export
-hello_world <- function() .Call(wrap__hello_world)
+`$.ArDoc` <- function (self, name) { func <- ArDoc[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.ArDoc` <- `$.ArDoc`
 
 # nolint end

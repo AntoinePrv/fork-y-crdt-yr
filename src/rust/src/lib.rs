@@ -1,5 +1,19 @@
 use extendr_api::prelude::*;
 
+#[extendr]
+struct ArDoc(yrs::Doc);
+
+#[extendr]
+impl ArDoc {
+    fn new() -> Self {
+        ArDoc(yrs::Doc::new())
+    }
+
+    fn client_id(&self) -> yrs::block::ClientID {
+        self.0.client_id()
+    }
+}
+
 /// Return string `"Hello world!"` to R.
 /// @export
 #[extendr]
@@ -12,5 +26,5 @@ fn hello_world() -> &'static str {
 // See corresponding C code in `entrypoint.c`.
 extendr_module! {
     mod yar;
-    fn hello_world;
+    impl ArDoc;
 }
