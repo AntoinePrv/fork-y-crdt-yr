@@ -1,0 +1,15 @@
+Package: yar
+Title: Y-CRDT Bindings to R
+Version: 0.0.0.9000
+Authors@R:
+    person("Antoine", "Prouvost", , "AntoinePrv@users.noreply.github.com", role = c("aut", "cre"))
+Description: Provides R bindings to y-crdt, a Rust implementation of the
+    Yjs CRDT (Conflict-free Replicated Data Type) framework.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Config/rextendr/version: 0.4.2
+SystemRequirements: Cargo (Rust's package manager), rustc >= 1.65.0, xz
+Depends: 
+    R (>= 4.2)
