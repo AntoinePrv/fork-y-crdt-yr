@@ -3,7 +3,7 @@ name = "yar"
 description = "y-crdt bindings to R lang"
 authors = ["AntoinePrv <AntoinePrv@users.noreply.github.com>"]
 channels = ["conda-forge"]
-platforms = ["osx-arm64", "linux-64"]
+platforms = ["osx-64", "osx-arm64", "linux-64", "linux-aarch64"]
 
 [environments]
 dev = { features = ["build", "test", "check", "dev"], solve-group = "default" }
