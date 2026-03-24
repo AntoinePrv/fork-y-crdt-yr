@@ -30,12 +30,16 @@ RUSTFLAGS = "-C link-arg=-Wl,-rpath,$CONDA_PREFIX/lib/R/lib"
 
 [feature.build.tasks.build-lib]
 description = "Compile Rust code into a library"
-cmd = "cargo build --manifest-path=rust/Cargo.toml --lib "
 cwd = "src"
 # Set target dir so that it does not conflict with the one from R
-env = { CARGO_TARGET_DIR = "$PIXI_PROJECT_ROOT/target/build-lib" }
+cmd = """
+cargo build \
+    --manifest-path=rust/Cargo.toml \
+    --target-dir=$PIXI_PROJECT_ROOT/target/build \
+    --lib
+"""
 inputs = ["src/rust/src/**/*.rs", "src/rust/Cargo.*"]
-outputs = ["src/rust/target/**/*"]
+outputs = ["target/build/**/*"]
 
 [feature.build.tasks.build-wrappers]
 description = "Generate R/extendr-wrappers.R from Rust #[extendr] macros"
@@ -66,7 +70,13 @@ depends-on = ["build-namespace"]
 
 [feature.test.tasks.test-cargo]
 description = "Run Rust unit tests"
-cmd = "cargo --locked test --workspace --manifest-path=src/rust/Cargo.toml"
+cwd = "src"
+cmd = """
+cargo --locked test \
+    --workspace \
+    --manifest-path=rust/Cargo.toml \
+    --target-dir=$PIXI_PROJECT_ROOT/target/build \
+"""
 
 # Code quality checks
 
