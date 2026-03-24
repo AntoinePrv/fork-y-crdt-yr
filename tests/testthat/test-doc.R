@@ -197,6 +197,20 @@ test_that("Map remove decreases len", {
   expect_false(map$contains_key(trans, "a"))
 })
 
+test_that("Array remove decreases len", {
+  doc <- Doc$new()
+  arr <- doc$get_or_insert_array("data")
+  trans <- Transaction$new(doc, mutable = TRUE)
+  on.exit(trans$drop())
+
+  arr$insert_any(trans, 0L, "a")
+  arr$insert_any(trans, 1L, "b")
+  arr$remove(trans, 0L)
+
+  expect_equal(arr$len(trans), 1L)
+  expect_equal(arr$get(trans, 0L), "b")
+})
+
 test_that("Map clear removes all entries", {
   doc <- Doc$new()
   map <- doc$get_or_insert_map("data")
@@ -216,25 +230,36 @@ test_that("Map insert methods return usable nested types", {
   trans <- Transaction$new(doc, mutable = TRUE)
   on.exit(trans$drop())
 
-  map$insert_any(trans, "scalar", "hello")
+  map$insert_any(trans, "string", "hello")
+  map$insert_any(trans, "number", 1.5)
+  map$insert_any(trans, "integer", 42L)
+  map$insert_any(trans, "bool", TRUE)
+  expect_equal(map$get(trans, "string"), "hello")
+  expect_equal(map$get(trans, "number"), 1.5)
+  expect_equal(map$get(trans, "integer"), 42L)
+  expect_equal(map$get(trans, "bool"), TRUE)
 
   text <- map$insert_text(trans, "content")
   expect_true(inherits(text, "TextRef"))
+  expect_true(inherits(map$get(trans, "content"), "TextRef"))
   text$push(trans, "hello")
   text$push(trans, " world")
   expect_equal(text$get_string(trans), "hello world")
 
   arr <- map$insert_array(trans, "list")
   expect_true(inherits(arr, "ArrayRef"))
+  expect_true(inherits(map$get(trans, "list"), "ArrayRef"))
   arr$insert_any(trans, 0L, TRUE)
   expect_equal(arr$len(trans), 1L)
 
   nested <- map$insert_map(trans, "nested")
   expect_true(inherits(nested, "MapRef"))
+  expect_true(inherits(map$get(trans, "nested"), "MapRef"))
   nested$insert_any(trans, "k", 42L)
   expect_equal(nested$len(trans), 1L)
 
-  expect_equal(map$len(trans), 4L)
+  expect_equal(map$len(trans), 7L)
+  expect_null(map$get(trans, "missing"))
 })
 
 test_that("ArrayRef insert methods return usable nested types", {
@@ -246,24 +271,35 @@ test_that("ArrayRef insert methods return usable nested types", {
   expect_true(inherits(arr, "ArrayRef"))
 
   arr$insert_any(trans, 0L, "hello")
+  arr$insert_any(trans, 1L, 1.5)
+  arr$insert_any(trans, 2L, 42L)
+  arr$insert_any(trans, 3L, TRUE)
+  expect_equal(arr$get(trans, 0L), "hello")
+  expect_equal(arr$get(trans, 1L), 1.5)
+  expect_equal(arr$get(trans, 2L), 42L)
+  expect_equal(arr$get(trans, 3L), TRUE)
 
-  text <- arr$insert_text(trans, 1L)
+  text <- arr$insert_text(trans, 4L)
   expect_true(inherits(text, "TextRef"))
+  expect_true(inherits(arr$get(trans, 4L), "TextRef"))
   text$push(trans, "hello")
   text$push(trans, " world")
   expect_equal(text$get_string(trans), "hello world")
 
-  nested_arr <- arr$insert_array(trans, 2L)
+  nested_arr <- arr$insert_array(trans, 5L)
   expect_true(inherits(nested_arr, "ArrayRef"))
+  expect_true(inherits(arr$get(trans, 5L), "ArrayRef"))
   nested_arr$insert_any(trans, 0L, 42L)
   expect_equal(nested_arr$len(trans), 1L)
 
-  nested_map <- arr$insert_map(trans, 3L)
+  nested_map <- arr$insert_map(trans, 6L)
   expect_true(inherits(nested_map, "MapRef"))
+  expect_true(inherits(arr$get(trans, 6L), "MapRef"))
   nested_map$insert_any(trans, "k", TRUE)
   expect_equal(nested_map$len(trans), 1L)
 
-  expect_equal(arr$len(trans), 4L)
+  expect_equal(arr$len(trans), 7L)
+  expect_null(arr$get(trans, 99L))
 })
 
 #####################

@@ -10,6 +10,15 @@ impl<T, E: ToString> IntoExtendr<T> for Result<T, E> {
     }
 }
 
+impl<T: IntoExtendr<Robj>> IntoExtendr<Robj> for Option<T> {
+    fn extendr(self) -> extendr_api::Result<Robj> {
+        match self {
+            None => Ok(Robj::from(())),
+            Some(v) => v.extendr(),
+        }
+    }
+}
+
 impl IntoExtendr<Robj> for yrs::Any {
     fn extendr(self) -> extendr_api::Result<Robj> {
         Ok(match self {

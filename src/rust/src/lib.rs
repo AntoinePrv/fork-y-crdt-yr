@@ -343,6 +343,16 @@ impl ArrayRef {
             .try_mut()
             .map(|trans| MapRef::from(self.0.insert(trans, index, MapPrelim::default())))
     }
+
+    fn get(&self, transaction: &mut Transaction, index: u32) -> Result<Robj, Error> {
+        try_read!(transaction, t => self.0.get(t, index).extendr()).flatten()
+    }
+
+    fn remove(&self, transaction: &mut Transaction, index: u32) -> Result<(), Error> {
+        transaction.try_mut().map(|trans| {
+            self.0.remove(trans, index);
+        })
+    }
 }
 
 #[extendr]
@@ -395,6 +405,10 @@ impl MapRef {
         transaction
             .try_mut()
             .map(|trans| MapRef::from(self.0.insert(trans, key, MapPrelim::default())))
+    }
+
+    fn get(&self, transaction: &mut Transaction, key: &str) -> Result<Robj, Error> {
+        try_read!(transaction, t => self.0.get(t, key).extendr()).flatten()
     }
 
     fn remove(&self, transaction: &mut Transaction, key: &str) -> Result<(), Error> {
