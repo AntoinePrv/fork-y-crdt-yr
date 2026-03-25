@@ -35,9 +35,9 @@ for (item in list(
   }, list(item = item))
 }
 
-test_that("Transaction$new returns a Transaction", {
+test_that("Transaction$lock returns a Transaction", {
   doc <- Doc$new()
-  trans <- Transaction$new(doc)
+  trans <- Transaction$lock(doc)
   expect_true(inherits(trans, "Transaction"))
 })
 
@@ -45,8 +45,8 @@ test_that("Text insert and retrieve get_string", {
   doc <- Doc$new()
   text <- doc$get_or_insert_text("article")
 
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
   text$insert(trans, 0L, "hello")
   text$insert(trans, 5L, " world")
   trans$commit()
@@ -59,8 +59,8 @@ test_that("Text push appends to the end", {
   doc <- Doc$new()
   text <- doc$get_or_insert_text("article")
 
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
   text$push(trans, "hello")
   text$push(trans, " world")
 
@@ -71,8 +71,8 @@ test_that("Text remove_range removes characters", {
   doc <- Doc$new()
   text <- doc$get_or_insert_text("article")
 
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
   text$push(trans, "hello world")
   text$remove_range(trans, 5L, 6L)
 
@@ -83,17 +83,17 @@ test_that("Multiple readonly transaction does not deadlock", {
   doc <- Doc$new()
   text <- doc$get_or_insert_text("article")
 
-  trans1 <- Transaction$new(doc)
-  trans2 <- Transaction$new(doc)
-  trans1$drop()
-  trans2$drop()
+  trans1 <- Transaction$lock(doc)
+  trans2 <- Transaction$lock(doc)
+  trans1$unlock()
+  trans2$unlock()
 })
 
-test_that("Errors when using Transaction after drop", {
+test_that("Errors when using Transaction after unlock", {
   doc <- Doc$new()
   text <- doc$get_or_insert_text("article")
-  trans <- Transaction$new(doc, mutable = TRUE)
-  trans$drop()
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  trans$unlock()
 
   expect_s3_class(trans$commit(), "extendr_error")
   expect_s3_class(text$get_string(trans), "extendr_error")
@@ -101,8 +101,8 @@ test_that("Errors when using Transaction after drop", {
 
 test_that("Transaction state_vector of empty doc is empty", {
   doc <- Doc$new()
-  trans <- Transaction$new(doc)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc)
+  on.exit(trans$unlock())
   sv <- trans$state_vector()
   expect_true(sv$is_empty())
 })
@@ -131,8 +131,8 @@ for (version in c("v1", "v2")) {
       doc <- Doc$new()
       text <- doc$get_or_insert_text("article")
 
-      trans <- Transaction$new(doc, mutable = TRUE)
-      on.exit(trans$drop())
+      trans <- Transaction$lock(doc, mutable = TRUE)
+      on.exit(trans$unlock())
       text$insert(trans, 0L, "hello")
       trans$commit()
 
@@ -163,8 +163,8 @@ for (version in c("v1", "v2")) {
   local({
     test_that(paste("apply_update", version, "errors on invalid data"), {
       doc <- Doc$new()
-      trans <- Transaction$new(doc, mutable = TRUE)
-      on.exit(trans$drop())
+      trans <- Transaction$lock(doc, mutable = TRUE)
+      on.exit(trans$unlock())
       expect_s3_class(trans[[paste0("apply_update_", version)]](as.raw(c(0xff))), "extendr_error")
     })
   }, list(version = version))
@@ -174,8 +174,8 @@ test_that("Map insert_text and contains_key", {
   doc <- Doc$new()
   map <- doc$get_or_insert_map("data")
 
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
   map$insert_text(trans, "key")
 
   expect_equal(map$len(trans), 1L)
@@ -187,8 +187,8 @@ test_that("Map remove decreases len", {
   doc <- Doc$new()
   map <- doc$get_or_insert_map("data")
 
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
   map$insert_text(trans, "a")
   map$insert_text(trans, "b")
   map$remove(trans, "a")
@@ -200,8 +200,8 @@ test_that("Map remove decreases len", {
 test_that("Array remove decreases len", {
   doc <- Doc$new()
   arr <- doc$get_or_insert_array("data")
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
 
   arr$insert_any(trans, 0L, "a")
   arr$insert_any(trans, 1L, "b")
@@ -215,8 +215,8 @@ test_that("Map clear removes all entries", {
   doc <- Doc$new()
   map <- doc$get_or_insert_map("data")
 
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
   map$insert_text(trans, "a")
   map$insert_text(trans, "b")
   map$clear(trans)
@@ -227,8 +227,8 @@ test_that("Map clear removes all entries", {
 test_that("Map insert methods return usable nested types", {
   doc <- Doc$new()
   map <- doc$get_or_insert_map("data")
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
 
   map$insert_any(trans, "string", "hello")
   map$insert_any(trans, "number", 1.5)
@@ -265,8 +265,8 @@ test_that("Map insert methods return usable nested types", {
 test_that("ArrayRef insert methods return usable nested types", {
   doc <- Doc$new()
   map <- doc$get_or_insert_map("data")
-  trans <- Transaction$new(doc, mutable = TRUE)
-  on.exit(trans$drop())
+  trans <- Transaction$lock(doc, mutable = TRUE)
+  on.exit(trans$unlock())
   arr <- map$insert_array(trans, "root")
   expect_true(inherits(arr, "ArrayRef"))
 
@@ -313,35 +313,35 @@ for (version in c("v1", "v2")) {
       doc <- Doc$new()
       text <- doc$get_or_insert_text("article")
 
-      trans <- Transaction$new(doc, mutable = TRUE)
+      trans <- Transaction$lock(doc, mutable = TRUE)
       text$insert(trans, 0L, "hello")
       text$insert(trans, 5L, " world")
       trans$commit()
 
       expect_equal(text$get_string(trans), "hello world")
-      trans$drop()
+      trans$unlock()
 
       # Synchronize state with remote replica
       remote_doc <- Doc$new()
       remote_text <- remote_doc$get_or_insert_text("article")
 
-      remote_trans <- Transaction$new(remote_doc)
+      remote_trans <- Transaction$lock(remote_doc)
       remote_sv_raw <- remote_trans$state_vector()[[paste0("encode_", version)]]()
-      remote_trans$drop()
+      remote_trans$unlock()
 
       # Get update with contents not observed by remote_doc
-      local_trans <- Transaction$new(doc)
+      local_trans <- Transaction$lock(doc)
       remote_sv <- StateVector[[paste0("decode_", version)]](remote_sv_raw)
       update <- local_trans[[paste0("encode_diff_", version)]](remote_sv)
-      local_trans$drop()
+      local_trans$unlock()
 
       # Apply update on remote doc
-      remote_trans_mut <- Transaction$new(remote_doc, mutable = TRUE)
+      remote_trans_mut <- Transaction$lock(remote_doc, mutable = TRUE)
       remote_trans_mut[[paste0("apply_update_", version)]](update)
       remote_trans_mut$commit()
 
       expect_equal(remote_text$get_string(remote_trans_mut), "hello world")
-      remote_trans_mut$drop()
+      remote_trans_mut$unlock()
     })
   }, list(version = version))
 }

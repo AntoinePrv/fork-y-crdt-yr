@@ -7,11 +7,11 @@ NULL
 
 Transaction <- new.env(parent = emptyenv())
 
-Transaction$new <- function(doc, mutable = FALSE) .Call(wrap__Transaction__new, doc, mutable)
+Transaction$lock <- function(doc, mutable = FALSE) .Call(wrap__Transaction__lock, doc, mutable)
 
 Transaction$commit <- function() .Call(wrap__Transaction__commit, self)
 
-Transaction$drop <- function() .Call(wrap__Transaction__drop, self)
+Transaction$unlock <- function() .Call(wrap__Transaction__unlock, self)
 
 Transaction$state_vector <- function() .Call(wrap__Transaction__state_vector, self)
 

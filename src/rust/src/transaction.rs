@@ -54,7 +54,7 @@ impl Transaction {
 
 #[extendr]
 impl Transaction {
-    pub fn new(doc: ExternalPtr<Doc>, #[extendr(default = "FALSE")] mutable: bool) -> Self {
+    pub fn lock(doc: ExternalPtr<Doc>, #[extendr(default = "FALSE")] mutable: bool) -> Self {
         let transaction = if mutable {
             DynTransaction::Write(doc.transact_mut())
         } else {
@@ -75,10 +75,7 @@ impl Transaction {
         self.try_mut().map(|trans| trans.commit())
     }
 
-    // Ambiguous with Drop trait, but we keep the name until we have a better approach
-    // on the R side (with_transaction blocked by not being able to get Robj from inside Doc)
-    #[allow(clippy::should_implement_trait)]
-    pub fn drop(&mut self) {
+    pub fn unlock(&mut self) {
         self.transaction = None;
     }
 
