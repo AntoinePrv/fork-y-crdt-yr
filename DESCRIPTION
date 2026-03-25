@@ -15,5 +15,10 @@ Depends:
     R (>= 4.2)
 Collate:
     'extendr-wrappers.R'
+    'array.R'
     'doc.R'
+    'map.R'
+    'state.R'
+    'text.R'
+    'transaction.R'
     'update.R'

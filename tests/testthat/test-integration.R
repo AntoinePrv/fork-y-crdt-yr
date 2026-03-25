@@ -2,7 +2,7 @@
 for (version in c("v1", "v2")) {
   local({
     test_that(paste("Synchronize two docs", version), {
-      doc <- Doc$new()
+      doc <- yar::Doc$new()
       text <- doc$get_or_insert_text("article")
 
       doc$with_transaction(function(trans) {
@@ -14,7 +14,7 @@ for (version in c("v1", "v2")) {
       }, mutable = TRUE)
 
       # Synchronize state with remote replica
-      remote_doc <- Doc$new()
+      remote_doc <- yar::Doc$new()
       remote_text <- remote_doc$get_or_insert_text("article")
 
       remote_sv_raw <- remote_doc$with_transaction(function(remote_trans) {
@@ -23,7 +23,7 @@ for (version in c("v1", "v2")) {
 
       # Get update with contents not observed by remote_doc
       update <- doc$with_transaction(function(local_trans) {
-        remote_sv <- StateVector[[paste0("decode_", version)]](remote_sv_raw)
+        remote_sv <- yar::StateVector[[paste0("decode_", version)]](remote_sv_raw)
         local_trans[[paste0("encode_diff_", version)]](remote_sv)
       })
 
