@@ -28,10 +28,10 @@ test_that("Errors when using Transaction after unlock", {
 
 test_that("Transaction state_vector of empty doc is empty", {
   doc <- Doc$new()
-  trans <- Transaction$lock(doc)
-  on.exit(trans$unlock())
-  sv <- trans$state_vector()
-  expect_true(sv$is_empty())
+  doc$with_transaction(function(trans) {
+    sv <- trans$state_vector()
+    expect_true(sv$is_empty())
+  })
 })
 
 for (version in c("v1", "v2")) {
@@ -40,14 +40,14 @@ for (version in c("v1", "v2")) {
       doc <- Doc$new()
       text <- doc$get_or_insert_text("article")
 
-      trans <- Transaction$lock(doc, mutable = TRUE)
-      on.exit(trans$unlock())
-      text$insert(trans, 0L, "hello")
-      trans$commit()
+      doc$with_transaction(function(trans) {
+        text$insert(trans, 0L, "hello")
+        trans$commit()
 
-      sv <- trans$state_vector()
-      diff <- trans[[paste0("encode_diff_", version)]](sv)
-      expect_true(is.raw(diff))
+        sv <- trans$state_vector()
+        diff <- trans[[paste0("encode_diff_", version)]](sv)
+        expect_true(is.raw(diff))
+      }, mutable = TRUE)
     })
   }, list(version = version))
 }
@@ -56,9 +56,9 @@ for (version in c("v1", "v2")) {
   local({
     test_that(paste("apply_update", version, "errors on invalid data"), {
       doc <- Doc$new()
-      trans <- Transaction$lock(doc, mutable = TRUE)
-      on.exit(trans$unlock())
-      expect_s3_class(trans[[paste0("apply_update_", version)]](as.raw(c(0xff))), "extendr_error")
+      doc$with_transaction(function(trans) {
+        expect_s3_class(trans[[paste0("apply_update_", version)]](as.raw(c(0xff))), "extendr_error")
+      }, mutable = TRUE)
     })
   }, list(version = version))
 }

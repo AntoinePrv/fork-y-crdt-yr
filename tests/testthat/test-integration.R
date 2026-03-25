@@ -5,35 +5,35 @@ for (version in c("v1", "v2")) {
       doc <- Doc$new()
       text <- doc$get_or_insert_text("article")
 
-      trans <- Transaction$lock(doc, mutable = TRUE)
-      text$insert(trans, 0L, "hello")
-      text$insert(trans, 5L, " world")
-      trans$commit()
+      doc$with_transaction(function(trans) {
+        text$insert(trans, 0L, "hello")
+        text$insert(trans, 5L, " world")
+        trans$commit()
 
-      expect_equal(text$get_string(trans), "hello world")
-      trans$unlock()
+        expect_equal(text$get_string(trans), "hello world")
+      }, mutable = TRUE)
 
       # Synchronize state with remote replica
       remote_doc <- Doc$new()
       remote_text <- remote_doc$get_or_insert_text("article")
 
-      remote_trans <- Transaction$lock(remote_doc)
-      remote_sv_raw <- remote_trans$state_vector()[[paste0("encode_", version)]]()
-      remote_trans$unlock()
+      remote_sv_raw <- remote_doc$with_transaction(function(remote_trans) {
+        remote_trans$state_vector()[[paste0("encode_", version)]]()
+      })
 
       # Get update with contents not observed by remote_doc
-      local_trans <- Transaction$lock(doc)
-      remote_sv <- StateVector[[paste0("decode_", version)]](remote_sv_raw)
-      update <- local_trans[[paste0("encode_diff_", version)]](remote_sv)
-      local_trans$unlock()
+      update <- doc$with_transaction(function(local_trans) {
+        remote_sv <- StateVector[[paste0("decode_", version)]](remote_sv_raw)
+        local_trans[[paste0("encode_diff_", version)]](remote_sv)
+      })
 
       # Apply update on remote doc
-      remote_trans_mut <- Transaction$lock(remote_doc, mutable = TRUE)
-      remote_trans_mut[[paste0("apply_update_", version)]](update)
-      remote_trans_mut$commit()
+      remote_doc$with_transaction(function(remote_trans) {
+        remote_trans[[paste0("apply_update_", version)]](update)
+        remote_trans$commit()
 
-      expect_equal(remote_text$get_string(remote_trans_mut), "hello world")
-      remote_trans_mut$unlock()
+        expect_equal(remote_text$get_string(remote_trans), "hello world")
+      }, mutable = TRUE)
     })
   }, list(version = version))
 }
