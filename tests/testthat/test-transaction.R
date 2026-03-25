@@ -62,3 +62,33 @@ for (version in c("v1", "v2")) {
     })
   }, list(version = version))
 }
+
+test_that("Origin can be created and compared with byte types", {
+  o1 <- Origin$new(32)
+  expect_true(inherits(o1, "Origin"))
+  expect_true(o1 == o1)
+  expect_true(o1 <= o1)
+
+  o2 <- Origin$new("my-id")
+  expect_true(inherits(o2, "Origin"))
+  expect_false(o2 == o1)
+  expect_false(o2 < o1)
+  expect_false(o1 > o2)
+
+  o3 <- Origin$new(charToRaw("my-id"))
+  expect_true(inherits(o3, "Origin"))
+  expect_false(o3 == o1)
+  expect_true(o3 == o2)
+})
+
+test_that("Origin cannot be created with invalid types", {
+  expect_s3_class(Origin$new(3.14), "extendr_error")
+  expect_s3_class(Origin$new(TRUE), "extendr_error")
+  expect_s3_class(Origin$new(NA), "extendr_error")
+  expect_s3_class(Origin$new(NULL), "extendr_error")
+})
+
+test_that("Origin can be printed", {
+  origin <- Origin$new("my-id")
+  expect_output(print(origin), "Origin\\([0-9a-f]+\\)")
+})

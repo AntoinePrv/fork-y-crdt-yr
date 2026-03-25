@@ -104,7 +104,44 @@ impl Transaction {
     }
 }
 
+#[extendr]
+pub struct Origin(yrs::Origin);
+
+#[extendr]
+impl Origin {
+    fn new(data: &Robj) -> Result<Self, Error> {
+        if let Ok(n) = TryInto::<i64>::try_into(data) {
+            Ok(Self(n.into()))
+        } else if let Ok(n) = TryInto::<u64>::try_into(data) {
+            Ok(Self(n.into()))
+        } else if let Ok(b) = TryInto::<&[u8]>::try_into(data) {
+            Ok(Self(b.into()))
+        } else if let Ok(s) = TryInto::<&str>::try_into(data) {
+            Ok(Self(s.into()))
+        } else {
+            Err(Error::Other("Invalid bytes for Origin".into()))
+        }
+    }
+
+    fn equal(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    fn less_than(&self, other: &Self) -> bool {
+        self.0 < other.0
+    }
+
+    fn less_than_equal(&self, other: &Self) -> bool {
+        self.0 <= other.0
+    }
+
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
 extendr_module! {
     mod transaction;
     impl Transaction;
+    impl Origin;
 }

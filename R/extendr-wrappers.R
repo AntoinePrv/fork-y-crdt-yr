@@ -29,6 +29,24 @@ Transaction$apply_update_v2 <- function(data) .Call(wrap__Transaction__apply_upd
 #' @export
 `[[.Transaction` <- `$.Transaction`
 
+Origin <- new.env(parent = emptyenv())
+
+Origin$new <- function(data) .Call(wrap__Origin__new, data)
+
+Origin$equal <- function(other) .Call(wrap__Origin__equal, self, other)
+
+Origin$less_than <- function(other) .Call(wrap__Origin__less_than, self, other)
+
+Origin$less_than_equal <- function(other) .Call(wrap__Origin__less_than_equal, self, other)
+
+Origin$to_string <- function() .Call(wrap__Origin__to_string, self)
+
+#' @export
+`$.Origin` <- function (self, name) { func <- Origin[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.Origin` <- `$.Origin`
+
 ArrayRef <- new.env(parent = emptyenv())
 
 ArrayRef$len <- function(transaction) .Call(wrap__ArrayRef__len, self, transaction)
