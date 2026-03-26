@@ -54,11 +54,17 @@ impl Transaction {
 
 #[extendr]
 impl Transaction {
-    pub fn lock(doc: ExternalPtr<Doc>, #[extendr(default = "FALSE")] mutable: bool) -> Self {
-        let transaction = if mutable {
-            DynTransaction::Write(doc.transact_mut())
-        } else {
-            DynTransaction::Read(doc.transact())
+    pub fn lock(
+        doc: ExternalPtr<Doc>,
+        #[extendr(default = "FALSE")] mutable: bool,
+        #[extendr(default = "NULL")] origin: Nullable<&Origin>,
+    ) -> Self {
+        let transaction = match (mutable, origin) {
+            (true, Nullable::NotNull(o)) => {
+                DynTransaction::Write(doc.transact_mut_with(o.0.clone()))
+            }
+            (true, Nullable::Null) => DynTransaction::Write(doc.transact_mut()),
+            (false, _) => DynTransaction::Read(doc.transact()),
         };
 
         // Safety: Doc live in R memory and is kept alive in the owner field of this struct
@@ -68,6 +74,16 @@ impl Transaction {
         Transaction {
             owner: doc.into(),
             transaction: Some(transaction),
+        }
+    }
+
+    pub fn origin(&self) -> Result<Robj, Error> {
+        match self.try_dyn()? {
+            DynTransaction::Write(trans) => match trans.origin() {
+                Some(o) => Ok(Origin(o.clone()).into()),
+                None => Ok(r!(NULL)),
+            },
+            DynTransaction::Read(_) => Ok(r!(NULL)),
         }
     }
 

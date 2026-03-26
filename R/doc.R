@@ -10,8 +10,8 @@ print.Doc <- function(self, ...) {
   invisible(self)
 }
 
-Doc$with_transaction <- function(callback, mutable = FALSE) {
-  transaction <- Transaction$lock(self, mutable = mutable)
+Doc$with_transaction <- function(callback, mutable = FALSE, origin = NULL) {
+  transaction <- Transaction$lock(self, mutable = mutable, origin = origin)
   on.exit(transaction$unlock())
   callback(transaction)
 }

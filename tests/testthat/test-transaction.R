@@ -1,3 +1,7 @@
+###############
+# Transaction #
+###############
+
 test_that("Transaction$lock returns a Transaction", {
   doc <- Doc$new()
   trans <- Transaction$lock(doc)
@@ -24,6 +28,20 @@ test_that("Errors when using Transaction after unlock", {
 
   expect_s3_class(trans$commit(), "extendr_error")
   expect_s3_class(text$get_string(trans), "extendr_error")
+})
+
+test_that("Transaction accepts origin", {
+  doc <- Doc$new()
+  doc$with_transaction(function(trans) {
+    expect_null(trans$origin())
+  }, mutable = TRUE)
+
+  origin <- Origin$new("my-id")
+  doc$with_transaction(function(trans) {
+    o <- trans$origin()
+    expect_true(inherits(o, "Origin"))
+    expect_true(o == origin)
+  }, mutable = TRUE, origin = origin)
 })
 
 test_that("Transaction state_vector of empty doc is empty", {
@@ -62,6 +80,10 @@ for (version in c("v1", "v2")) {
     })
   }, list(version = version))
 }
+
+##########
+# Origin #
+##########
 
 test_that("Origin can be created and compared with byte types", {
   o1 <- Origin$new(32)
