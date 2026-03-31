@@ -84,7 +84,9 @@ impl MapRef {
                 keys.set_elt(i, k.into());
                 values.set_elt(i, v.extendr()?)?;
             }
-            values.set_names(keys.as_slice())?;
+            if n > 0 {
+                values.set_names(keys.as_slice())?;
+            }
             Ok::<List, Error>(values)
         })
         .and_then(|r| r)

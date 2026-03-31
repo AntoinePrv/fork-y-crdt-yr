@@ -41,11 +41,17 @@ impl IntoExtendr<Robj> for yrs::Any {
                 List::from_values(values).into()
             }
             yrs::Any::Map(v) => {
-                let (keys, values): (Vec<&str>, Vec<Robj>) = v
-                    .iter()
-                    .map(|(k, v)| Ok((k.as_str(), v.clone().extendr()?)))
-                    .collect::<extendr_api::Result<_>>()?;
-                List::from_names_and_values(keys, values).unwrap().into()
+                let n = v.len();
+                let mut keys = Strings::new(n);
+                let mut values = List::new(n);
+                for (i, (k, v)) in v.iter().enumerate() {
+                    keys.set_elt(i, k.as_str().into());
+                    values.set_elt(i, v.clone().extendr()?)?;
+                }
+                if n > 0 {
+                    values.set_names(keys.as_slice())?;
+                }
+                values.into()
             }
         })
     }
@@ -70,6 +76,22 @@ impl IntoExtendr<Robj> for yrs::Out {
                 Err(Error::Other("UndefinedRef is not supported".to_string()))
             }
         }
+    }
+}
+
+impl IntoExtendr<Robj> for &yrs::types::Attrs {
+    fn extendr(self) -> extendr_api::Result<Robj> {
+        let n = self.len();
+        let mut keys = Strings::new(n);
+        let mut values = List::new(n);
+        for (i, (k, v)) in self.iter().enumerate() {
+            keys.set_elt(i, k.as_ref().into());
+            values.set_elt(i, v.clone().extendr()?)?;
+        }
+        if n > 0 {
+            values.set_names(keys.as_slice())?;
+        }
+        Ok(values.into())
     }
 }
 
@@ -117,6 +139,34 @@ impl FromExtendr<Robj> for yrs::Any {
     }
 }
 
+impl FromExtendr<Robj> for yrs::types::Attrs {
+    fn from_extendr(robj: Robj) -> extendr_api::Result<Self> {
+        if !robj.is_list() {
+            return Err(Error::Other(format!(
+                "Expected a named list for Attrs, got {:?}",
+                robj.rtype()
+            )));
+        }
+        let list = robj.as_list().unwrap();
+        // In R, a partially named list has names() return Some but with empty
+        // strings for unnamed elements.
+        let fully_named = list
+            .names()
+            .map(|mut ns| ns.all(|n| !n.is_empty()))
+            .unwrap_or(false);
+        if !fully_named {
+            return Err(Error::Other(
+                "Expected a fully named list for Attrs".to_string(),
+            ));
+        }
+        list.names()
+            .unwrap()
+            .zip(list.values())
+            .map(|(k, v)| Ok((std::sync::Arc::from(k), yrs::Any::from_extendr(v)?)))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -158,8 +208,7 @@ mod tests {
     #[test]
     fn test_to_any_string() {
         extendr_api::test! {
-            let s: Arc<str> = Arc::from("hello");
-            assert_eq!(yrs::Any::String(s).extendr().unwrap(), r!("hello"));
+            assert_eq!(yrs::Any::String(Arc::from("hello")).extendr().unwrap(), r!("hello"));
         }
     }
 
@@ -242,6 +291,30 @@ mod tests {
     }
 
     #[test]
+    fn test_to_attrs() {
+        extendr_api::test! {
+            let attrs: yrs::types::Attrs = HashMap::from([
+                (Arc::from("bold"), yrs::Any::Bool(true)),
+                (Arc::from("color"), yrs::Any::String(Arc::from("red"))),
+            ]);
+            let robj = attrs.extendr().unwrap();
+            assert!(robj.is_list());
+            assert_eq!(robj.len(), 2);
+            assert!(robj.names().is_some());
+        }
+    }
+
+    #[test]
+    fn test_to_attrs_empty() {
+        extendr_api::test! {
+            let attrs: yrs::types::Attrs = HashMap::new();
+            let robj = attrs.extendr().unwrap();
+            assert!(robj.is_list());
+            assert_eq!(robj.len(), 0);
+        }
+    }
+
+    #[test]
     fn test_from_any_null() {
         extendr_api::test! {
             assert!(matches!(yrs::Any::from_extendr(r!(NULL)).unwrap(), yrs::Any::Null));
@@ -298,6 +371,50 @@ mod tests {
         extendr_api::test! {
             let robj: Robj = List::from_names_and_values(["x"], [r!(1.5)]).unwrap().into();
             assert!(matches!(yrs::Any::from_extendr(robj).unwrap(), yrs::Any::Map(ref m) if m.len() == 1));
+        }
+    }
+
+    #[test]
+    fn test_from_attrs() {
+        extendr_api::test! {
+            let robj: Robj = List::from_names_and_values(["bold", "size"], [r!(true), r!(12.0)]).unwrap().into();
+            let attrs = yrs::types::Attrs::from_extendr(robj).unwrap();
+            assert_eq!(attrs.len(), 2);
+            assert!(matches!(attrs.get("bold"), Some(yrs::Any::Bool(true))));
+            assert!(matches!(attrs.get("size"), Some(yrs::Any::Number(v)) if v == &12.0));
+        }
+    }
+
+    #[test]
+    fn test_from_attrs_empty() {
+        extendr_api::test! {
+            let robj: Robj = List::from_names_and_values([] as [&str; 0], [] as [Robj; 0]).unwrap().into();
+            let attrs = yrs::types::Attrs::from_extendr(robj).unwrap();
+            assert_eq!(attrs.len(), 0);
+        }
+    }
+
+    #[test]
+    fn test_from_attrs_not_a_list() {
+        extendr_api::test! {
+            assert!(yrs::types::Attrs::from_extendr(r!(42.0)).is_err());
+        }
+    }
+
+    #[test]
+    fn test_from_attrs_unnamed_list() {
+        extendr_api::test! {
+            let robj: Robj = List::from_values([r!(true)]).into();
+            assert!(yrs::types::Attrs::from_extendr(robj).is_err());
+        }
+    }
+
+    #[test]
+    fn test_from_attrs_partially_named_list() {
+        extendr_api::test! {
+            // "bold" is named but second element is not (name = "")
+            let robj: Robj = List::from_names_and_values(["bold", ""], [r!(true), r!(1.0)]).unwrap().into();
+            assert!(yrs::types::Attrs::from_extendr(robj).is_err());
         }
     }
 }
