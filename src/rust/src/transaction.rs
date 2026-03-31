@@ -7,7 +7,7 @@ use crate::{Doc, StateVector};
 
 macro_rules! try_read {
     ($txn:expr, $t:ident => $body:expr) => {
-        $txn.try_dyn().map(|txn| match txn {
+        $txn.try_get().map(|txn| match txn {
             crate::transaction::DynTransaction::Write($t) => $body,
             &crate::transaction::DynTransaction::WriteRef($t) => $body,
             crate::transaction::DynTransaction::Read($t) => $body,
@@ -59,8 +59,15 @@ impl Transaction {
         }
     }
 
-    pub(crate) fn try_dyn(&self) -> Result<&DynTransaction<'static>, Error> {
+    pub(crate) fn try_get(&self) -> Result<&DynTransaction<'static>, Error> {
         match &*self.transaction {
+            Some(trans) => Ok(trans),
+            None => Err(Error::Other("Transaction was dropped".into())),
+        }
+    }
+
+    pub(crate) fn try_get_mut(&mut self) -> Result<&mut DynTransaction<'static>, Error> {
+        match &mut *self.transaction {
             Some(trans) => Ok(trans),
             None => Err(Error::Other("Transaction was dropped".into())),
         }
@@ -68,10 +75,17 @@ impl Transaction {
 
     pub(crate) fn try_write_mut(&mut self) -> Result<&mut yrs::TransactionMut<'static>, Error> {
         use DynTransaction::*;
-        match &mut *self.transaction {
-            Some(Write(trans)) => Ok(trans),
-            Some(WriteRef(_) | Read(_)) => Err(Error::Other("Transaction is readonly".into())),
-            None => Err(Error::Other("Transaction was dropped".into())),
+        match self.try_get_mut()? {
+            Write(trans) => Ok(trans),
+            WriteRef(_) | Read(_) => Err(Error::Other("Transaction is readonly".into())),
+        }
+    }
+
+    pub(crate) fn try_write(&self) -> Result<&yrs::TransactionMut<'static>, Error> {
+        use DynTransaction::*;
+        match self.try_get()? {
+            Write(trans) | &WriteRef(trans) => Ok(trans),
+            Read(_) => Err(Error::Other("Transaction is readonly".into())),
         }
     }
 }
@@ -105,7 +119,7 @@ impl Transaction {
 
     pub fn origin(&self) -> Result<Robj, Error> {
         use DynTransaction::*;
-        match self.try_dyn()? {
+        match self.try_get()? {
             Write(trans) | &WriteRef(trans) => match trans.origin() {
                 Some(o) => Ok(Origin(o.clone()).into()),
                 None => Ok(r!(NULL)),
