@@ -5,6 +5,14 @@ macro_rules! extendr_struct {
         $(#[$attr])*
         $vis struct $T($Y);
 
+        impl std::ops::Deref for $T {
+            type Target = $Y;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
         impl AsRef<$Y> for $T {
             fn as_ref(&self) -> &$Y {
                 &self.0
@@ -40,13 +48,14 @@ where
     }
 }
 
-pub(crate) trait ExtendrRef<Y> {
-    type Error;
-    type Owner: lifetime::Owner<Y>;
+pub(crate) trait ExtendrRef<Y>
+where
+    Self: Sized,
+    ExternalPtr<Self>: lifetime::Owner<Y>,
+{
+    fn guard<'a>(r: &'a Y) -> lifetime::Guard<'a, Y, ExternalPtr<Self>>;
 
-    fn guard<'a>(r: &'a Y) -> lifetime::Guard<'a, Y, Self::Owner>;
-
-    fn try_map<R>(&self, f: impl FnOnce(&Y) -> R) -> Result<R, Self::Error>;
+    fn try_map<R>(&self, f: impl FnOnce(&Y) -> R) -> Result<R, Error>;
 }
 
 impl<T, Y> ExtendrRef<Y> for T
@@ -54,10 +63,7 @@ where
     T: AsRef<lifetime::CheckedRef<Y>>,
     ExternalPtr<T>: lifetime::Owner<Y>,
 {
-    type Error = extendr_api::Error;
-    type Owner = ExternalPtr<T>;
-
-    fn guard<'a>(r: &'a Y) -> lifetime::Guard<'a, Y, Self::Owner> {
+    fn guard<'a>(r: &'a Y) -> lifetime::Guard<'a, Y, ExternalPtr<T>> {
         lifetime::CheckedRef::new_guarded(r)
     }
 

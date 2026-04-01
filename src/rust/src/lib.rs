@@ -1,5 +1,6 @@
 pub mod array;
 pub mod doc;
+pub mod event;
 pub mod map;
 pub mod state;
 pub mod text;

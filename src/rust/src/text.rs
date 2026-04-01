@@ -1,10 +1,11 @@
 use extendr_api::prelude::*;
 use yrs::types::{text::TextEvent as YTextEvent, PathSegment as YPathSegment};
-use yrs::{GetString as YGetString, Observable as YObservable, Text as YText};
+use yrs::{GetString as YGetString, Text as YText};
 
+use crate::event::ExtendrObservable;
 use crate::type_conversion::IntoExtendr;
 use crate::utils::{self, lifetime, ExtendrRef};
-use crate::{try_read, Origin, Transaction};
+use crate::{try_read, Transaction};
 
 utils::extendr_struct!(#[extendr] pub TextRef(yrs::TextRef));
 
@@ -47,32 +48,11 @@ impl TextRef {
     }
 
     pub fn observe(&self, f: Function, key: &Robj) -> Result<(), Error> {
-        if f.formals().map(|g| g.len()).unwrap_or(0) != 2 {
-            return Err(Error::Other(
-                "Callback expect exactly two parameters: transaction and event".into(),
-            ));
-        }
-        self.0.observe_with(
-            Origin::new(key)?,
-            move |trans: &yrs::TransactionMut<'_>, event: &YTextEvent| {
-                // Converting to Robj first as the converter will set the class symbol attribute,
-                // otherwise it will only be seen as an `externalptr` from R.
-                let event = TextEvent::guard(event);
-                let mut trans: Robj = Transaction::from_ref(trans).into();
-                let result = f.call(pairlist!(trans.clone(), event.get().clone()));
-                TryInto::<&mut Transaction>::try_into(&mut trans)
-                    .unwrap()
-                    .unlock();
-                // TODO Either take an on_error, or store it somewhere
-                result.unwrap();
-            },
-        );
-        Ok(())
+        ExtendrObservable::<TextEvent>::observe(self, f, key)
     }
 
     pub fn unobserve(&self, key: &Robj) -> Result<(), Error> {
-        self.0.unobserve(Origin::new(key)?);
-        Ok(())
+        ExtendrObservable::<TextEvent>::unobserve(self, key)
     }
 }
 
