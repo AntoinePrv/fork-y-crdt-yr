@@ -1,10 +1,12 @@
 use extendr_api::prelude::*;
+use yrs::types::{map::MapEvent as YMapEvent, PathSegment as YPathSegment};
 use yrs::{
     ArrayPrelim as YArrayPrelim, Map as YMap, MapPrelim as YMapPrelim, TextPrelim as YTextPrelim,
 };
 
+use crate::event::ExtendrObservable;
 use crate::type_conversion::{FromExtendr, IntoExtendr};
-use crate::utils;
+use crate::utils::{self, lifetime, ExtendrRef};
 use crate::{try_read, ArrayRef, TextRef, Transaction};
 
 utils::extendr_struct!(#[extendr] pub MapRef(yrs::MapRef));
@@ -87,9 +89,51 @@ impl MapRef {
     pub fn clear(&self, transaction: &mut Transaction) -> Result<(), Error> {
         transaction.try_write_mut().map(|trans| self.0.clear(trans))
     }
+
+    pub fn observe(&self, f: Function, key: &Robj) -> Result<(), Error> {
+        ExtendrObservable::<MapEvent>::observe(self, f, key)
+    }
+
+    pub fn unobserve(&self, key: &Robj) -> Result<(), Error> {
+        ExtendrObservable::<MapEvent>::unobserve(self, key)
+    }
+}
+
+utils::extendr_struct!(#[extendr] pub MapEvent(lifetime::CheckedRef<YMapEvent>));
+
+#[extendr]
+impl MapEvent {
+    fn target(&self) -> Result<MapRef, Error> {
+        // Cloning is shallow BranchPtr copy pointing to same data.
+        self.try_map(|event| event.target().clone().into())
+    }
+
+    fn keys(&self, transaction: &Transaction) -> Result<Robj, Error> {
+        self.try_map(|event| {
+            transaction
+                .try_write()
+                .map(|trans| event.keys(trans).extendr())
+        })
+        .and_then(|r| r) // TODO(MSRV 1.89) .flatten()
+        .and_then(|r| r) // TODO(MSRV 1.89) .flatten()
+    }
+
+    fn path(&self) -> Result<List, Error> {
+        self.try_map(|event| {
+            event
+                .path()
+                .into_iter()
+                .map(|seg| match seg {
+                    YPathSegment::Key(k) => Strings::from_values([k]).into_robj(),
+                    YPathSegment::Index(i) => IntoRobj::into_robj(i),
+                })
+                .collect()
+        })
+    }
 }
 
 extendr_module! {
     mod map;
     impl MapRef;
+    impl MapEvent;
 }

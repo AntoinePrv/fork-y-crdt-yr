@@ -99,11 +99,29 @@ MapRef$remove <- function(transaction, key) .Call(wrap__MapRef__remove, self, tr
 
 MapRef$clear <- function(transaction) .Call(wrap__MapRef__clear, self, transaction)
 
+MapRef$observe <- function(f, key) .Call(wrap__MapRef__observe, self, f, key)
+
+MapRef$unobserve <- function(key) .Call(wrap__MapRef__unobserve, self, key)
+
 #' @export
 `$.MapRef` <- function (self, name) { func <- MapRef[[name]]; environment(func) <- environment(); func }
 
 #' @export
 `[[.MapRef` <- `$.MapRef`
+
+MapEvent <- new.env(parent = emptyenv())
+
+MapEvent$target <- function() .Call(wrap__MapEvent__target, self)
+
+MapEvent$keys <- function(transaction) .Call(wrap__MapEvent__keys, self, transaction)
+
+MapEvent$path <- function() .Call(wrap__MapEvent__path, self)
+
+#' @export
+`$.MapEvent` <- function (self, name) { func <- MapEvent[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.MapEvent` <- `$.MapEvent`
 
 StateVector <- new.env(parent = emptyenv())
 

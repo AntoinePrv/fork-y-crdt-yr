@@ -140,3 +140,95 @@ test_that("Map clear removes all entries", {
     mutable = TRUE
   )
 })
+
+####################
+# Observer pattern #
+####################
+
+test_that("Map observe callback can read current state via transaction", {
+  doc <- Doc$new()
+  map <- doc$get_or_insert_map("data")
+
+  called <- FALSE
+  observed_len <- NULL
+  observed_target_len <- NULL
+  observed_path <- NULL
+  observed_keys <- NULL
+  map$observe(
+    function(trans, event) {
+      called <<- TRUE
+      observed_len <<- map$len(trans)
+      observed_target_len <<- event$target()$len(trans)
+      observed_path <<- event$path()
+      observed_keys <<- event$keys(trans)
+    },
+    key = 1L
+  )
+
+  doc$with_transaction(
+    function(trans) map$insert_any(trans, "foo", 42L),
+    mutable = TRUE
+  )
+
+  expect_true(called)
+  expect_equal(observed_len, 1L)
+  expect_equal(observed_target_len, 1L)
+  expect_equal(observed_path, list())
+  expect_true(is.list(observed_keys))
+  expect_true("foo" %in% names(observed_keys))
+})
+
+test_that("Map unobserve stops callback from firing", {
+  doc <- Doc$new()
+  map <- doc$get_or_insert_map("data")
+
+  count <- 0L
+  map$observe(
+    function(trans, event) count <<- count + 1L,
+    key = 1L
+  )
+
+  doc$with_transaction(
+    function(trans) map$insert_any(trans, "a", 1L),
+    mutable = TRUE
+  )
+  expect_equal(count, 1L)
+
+  map$unobserve(key = 1L)
+
+  doc$with_transaction(
+    function(trans) map$insert_any(trans, "b", 2L),
+    mutable = TRUE
+  )
+  expect_equal(count, 1L)
+})
+
+test_that("Map observe callback transaction cannot be used after callback returns", {
+  doc <- Doc$new()
+  map <- doc$get_or_insert_map("data")
+
+  captured_trans <- NULL
+  captured_event <- NULL
+  map$observe(
+    function(trans, event) {
+      captured_trans <<- trans
+      captured_event <<- event
+    },
+    key = 1L
+  )
+
+  doc$with_transaction(
+    function(trans) map$insert_any(trans, "foo", 1L),
+    mutable = TRUE
+  )
+
+  # Captured objects are invalidated
+  expect_s3_class(
+    map$len(captured_trans),
+    "extendr_error"
+  )
+  expect_s3_class(
+    captured_event$path(),
+    "extendr_error"
+  )
+})
