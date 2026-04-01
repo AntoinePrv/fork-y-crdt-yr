@@ -1,5 +1,7 @@
 use extendr_api::prelude::*;
-use yrs::types::{Attrs as YAttrs, Delta as YDelta, EntryChange as YEntryChange};
+use yrs::types::{
+    Attrs as YAttrs, Delta as YDelta, EntryChange as YEntryChange, PathSegment as YPathSegment,
+};
 use yrs::{Any as YAny, Out as YOut};
 
 pub trait IntoExtendr<T> {
@@ -47,6 +49,24 @@ where
 {
     fn extendr(self) -> extendr_api::Result<Robj> {
         Ok(List::from_values(self.iter().map(|e| e.extendr())).into())
+    }
+}
+
+impl<T> IntoExtendr<Robj> for &std::collections::VecDeque<T>
+where
+    for<'a> &'a T: IntoExtendr<Robj>,
+{
+    fn extendr(self) -> extendr_api::Result<Robj> {
+        Ok(List::from_values(self.iter().map(|e| e.extendr())).into())
+    }
+}
+
+impl IntoExtendr<Robj> for &YPathSegment {
+    fn extendr(self) -> extendr_api::Result<Robj> {
+        match self {
+            YPathSegment::Key(k) => Ok(k.into_robj()),
+            YPathSegment::Index(i) => Ok(i.into_robj()),
+        }
     }
 }
 
@@ -215,6 +235,28 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+
+    #[test]
+    fn test_to_path_segment() {
+        extendr_api::test! {
+            assert_eq!(YPathSegment::Key(Arc::from("foo")).extendr().unwrap(), r!("foo"));
+            assert_eq!(YPathSegment::Index(3u32).extendr().unwrap(), r!(3u32));
+        }
+    }
+
+    #[test]
+    fn test_to_path() {
+        extendr_api::test! {
+            use std::collections::VecDeque;
+            use yrs::types::PathSegment as YPathSegment;
+            let path: VecDeque<YPathSegment> = VecDeque::from([
+                YPathSegment::Key(Arc::from("foo")),
+                YPathSegment::Index(2u32),
+            ]);
+            let robj = path.extendr().unwrap();
+            assert_eq!(robj, R!(r#"list("foo", 2)"#).unwrap());
+        }
+    }
 
     #[test]
     fn test_to_any_null() {

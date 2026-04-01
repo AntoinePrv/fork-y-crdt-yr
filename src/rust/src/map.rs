@@ -1,5 +1,5 @@
 use extendr_api::prelude::*;
-use yrs::types::{map::MapEvent as YMapEvent, PathSegment as YPathSegment};
+use yrs::types::map::MapEvent as YMapEvent;
 use yrs::{
     ArrayPrelim as YArrayPrelim, Map as YMap, MapPrelim as YMapPrelim, TextPrelim as YTextPrelim,
 };
@@ -118,17 +118,8 @@ impl MapEvent {
         .and_then(|r| r) // TODO(MSRV 1.89) .flatten()
     }
 
-    fn path(&self) -> Result<List, Error> {
-        self.try_map(|event| {
-            event
-                .path()
-                .into_iter()
-                .map(|seg| match seg {
-                    YPathSegment::Key(k) => Strings::from_values([k]).into_robj(),
-                    YPathSegment::Index(i) => IntoRobj::into_robj(i),
-                })
-                .collect()
-        })
+    fn path(&self) -> Result<Robj, Error> {
+        self.try_map(|event| event.path().extendr()).and_then(|r| r) // TODO(MSRV 1.89) .flatten()
     }
 }
 
