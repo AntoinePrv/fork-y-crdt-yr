@@ -16,6 +16,7 @@ pub use crate::{
     text::TextRef, transaction::Origin, transaction::Transaction, update::Update,
 };
 pub(crate) use transaction::try_read;
+pub(crate) use transaction::ExtendrTransaction;
 
 // Register function with R.
 // See corresponding C code in `entrypoint.c`.

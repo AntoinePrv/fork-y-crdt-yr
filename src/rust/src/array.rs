@@ -5,7 +5,7 @@ use yrs::{Array as YArray, ArrayPrelim, MapPrelim as YMapPrelim, TextPrelim as Y
 use crate::event::ExtendrObservable;
 use crate::type_conversion::{FromExtendr, IntoExtendr};
 use crate::utils::{self, lifetime, ExtendrRef};
-use crate::{try_read, MapRef, TextRef, Transaction};
+use crate::{try_read, ExtendrTransaction, MapRef, TextRef, Transaction};
 
 utils::extendr_struct!(#[extendr] pub ArrayRef(yrs::ArrayRef));
 

@@ -6,12 +6,17 @@ use crate::type_conversion::IntoExtendr;
 use crate::utils;
 use crate::{Doc, Snapshot, StateVector};
 
+/// A reference to a readable transaction, for dispatch in the [`try_read`] macro.
+pub(crate) enum DynTransactionRef<'a> {
+    Read(&'a yrs::Transaction<'static>),
+    Write(&'a yrs::TransactionMut<'static>),
+}
+
 macro_rules! try_read {
     ($txn:expr, $t:ident => $body:expr) => {
-        $txn.try_get().map(|txn| match txn {
-            crate::transaction::DynTransaction::Write($t) => $body,
-            &crate::transaction::DynTransaction::WriteRef($t) => $body,
-            crate::transaction::DynTransaction::Read($t) => $body,
+        $txn.try_dyn().map(|txn| match txn {
+            crate::transaction::DynTransactionRef::Read($t) => $body,
+            crate::transaction::DynTransactionRef::Write($t) => $body,
         })
     };
 }
@@ -21,72 +26,138 @@ pub(crate) use try_read;
 // Perhaps we could have two different bindings of Transaction and TransactionMut
 // with the same API and use a macro to bind YTransact trait methods.
 #[allow(clippy::large_enum_variant)]
-pub enum DynTransaction<'doc> {
+pub enum OwnedTransaction<'doc> {
     Read(yrs::Transaction<'doc>),
     Write(yrs::TransactionMut<'doc>),
-    WriteRef(&'doc yrs::TransactionMut<'doc>),
+}
+
+// Fields drop in declaration order: the transaction drops before the owner Robj,
+// so the Doc is still alive when the transaction releases its borrow/lock.
+struct OwnedYokedTransaction {
+    transaction: OwnedTransaction<'static>,
+    // Keeps the Doc alive while the transaction is alive.
+    #[allow(dead_code)]
+    owner: Robj,
+}
+
+pub struct RefTransaction<'doc>(pub(crate) &'doc yrs::TransactionMut<'doc>);
+
+enum TransactionOrigin {
+    Owned(OwnedYokedTransaction),
+    Ref(RefTransaction<'static>),
 }
 
 // TODO this is unsound: the lifetime is still accessible from safe code.
 // Either move to raw pointer + unsafe, or consider using yoke crate for this purpose.
 #[extendr]
 pub struct Transaction {
-    // Transaction auto commits on Drop, and keeps a lock onto the Doc.
-    transaction: std::mem::ManuallyDrop<Option<DynTransaction<'static>>>,
-    // Keeps the Doc alive while the transaction is alive.
-    #[allow(dead_code)]
-    owner: Robj,
+    transaction: Option<TransactionOrigin>,
 }
 
-impl Drop for Transaction {
-    fn drop(&mut self) {
-        // Safety: transaction must be dropped before owner so that the Doc is still
-        // alive when the transaction releases its borrow/lock on it.
-        unsafe { std::mem::ManuallyDrop::drop(&mut self.transaction) };
-        // owner drops here, potentially allowing the Doc to be freed by R's GC.
+pub(crate) trait ExtendrTransaction {
+    fn try_dyn(&self) -> Result<DynTransactionRef<'_>, Error>;
+    fn try_write(&self) -> Result<&yrs::TransactionMut<'static>, Error>;
+    fn try_write_mut(&mut self) -> Result<&mut yrs::TransactionMut<'static>, Error>;
+
+    fn is_mutable(&self) -> Result<bool, Error> {
+        Ok(self.try_write().is_ok())
+    }
+
+    fn origin(&self) -> Result<Robj, Error> {
+        match self.try_write() {
+            Ok(trans) => match trans.origin() {
+                Some(o) => Ok(Origin(o.clone()).into()),
+                None => Ok(r!(NULL)),
+            },
+            Err(_) => Ok(r!(NULL)),
+        }
+    }
+
+    fn commit(&mut self) -> Result<(), Error> {
+        self.try_write_mut().map(|trans| trans.commit())
+    }
+
+    fn state_vector(&self) -> Result<StateVector, Error> {
+        try_read!(self, t => t.state_vector().into())
+    }
+
+    fn encode_diff_v1(&self, state_vector: &StateVector) -> Result<Vec<u8>, Error> {
+        try_read!(self, t => t.encode_diff_v1(state_vector.as_ref()))
+    }
+
+    fn encode_diff_v2(&self, state_vector: &StateVector) -> Result<Vec<u8>, Error> {
+        try_read!(self, t => t.encode_diff_v2(state_vector.as_ref()))
+    }
+
+    fn encode_state_as_update_v1(&self, state_vector: &StateVector) -> Result<Vec<u8>, Error> {
+        try_read!(self, t => t.encode_state_as_update_v1(state_vector.as_ref()))
+    }
+
+    fn encode_state_as_update_v2(&self, state_vector: &StateVector) -> Result<Vec<u8>, Error> {
+        try_read!(self, t => t.encode_state_as_update_v2(state_vector.as_ref()))
+    }
+
+    fn apply_update_v1(&mut self, data: &[u8]) -> Result<(), Error> {
+        let trans = self.try_write_mut()?;
+        let update = yrs::Update::decode_v1(data).extendr()?;
+        trans.apply_update(update).extendr()
+    }
+
+    fn apply_update_v2(&mut self, data: &[u8]) -> Result<(), Error> {
+        let trans = self.try_write_mut()?;
+        let update = yrs::Update::decode_v2(data).extendr()?;
+        trans.apply_update(update).extendr()
+    }
+
+    fn snapshot(&self) -> Result<Snapshot, Error> {
+        try_read!(self, t => t.snapshot().into())
     }
 }
 
 impl Transaction {
     pub(crate) fn from_ref(transaction: &yrs::TransactionMut<'_>) -> Self {
-        let transaction = DynTransaction::WriteRef(transaction);
+        let transaction = RefTransaction(transaction);
         // TODO Safety: None, unlock must be called while the original ref is valid
         let transaction = unsafe {
-            std::mem::transmute::<DynTransaction<'_>, DynTransaction<'static>>(transaction)
+            std::mem::transmute::<RefTransaction<'_>, RefTransaction<'static>>(transaction)
         };
         Transaction {
-            owner: Default::default(),
-            transaction: std::mem::ManuallyDrop::new(Some(transaction)),
+            transaction: Some(TransactionOrigin::Ref(transaction)),
         }
     }
+}
 
-    pub(crate) fn try_get(&self) -> Result<&DynTransaction<'static>, Error> {
-        match &*self.transaction {
-            Some(trans) => Ok(trans),
+impl ExtendrTransaction for Transaction {
+    fn try_dyn(&self) -> Result<DynTransactionRef<'_>, Error> {
+        match &self.transaction {
+            Some(TransactionOrigin::Owned(t)) => match &t.transaction {
+                OwnedTransaction::Read(t) => Ok(DynTransactionRef::Read(t)),
+                OwnedTransaction::Write(t) => Ok(DynTransactionRef::Write(t)),
+            },
+            Some(TransactionOrigin::Ref(t)) => Ok(DynTransactionRef::Write(t.0)),
             None => Err(Error::Other("Transaction was dropped".into())),
         }
     }
 
-    pub(crate) fn try_get_mut(&mut self) -> Result<&mut DynTransaction<'static>, Error> {
-        match &mut *self.transaction {
-            Some(trans) => Ok(trans),
+    fn try_write(&self) -> Result<&yrs::TransactionMut<'static>, Error> {
+        match &self.transaction {
+            Some(TransactionOrigin::Owned(t)) => match &t.transaction {
+                OwnedTransaction::Write(t) => Ok(t),
+                OwnedTransaction::Read(_) => Err(Error::Other("Transaction is readonly".into())),
+            },
+            Some(TransactionOrigin::Ref(t)) => Ok(t.0),
             None => Err(Error::Other("Transaction was dropped".into())),
         }
     }
 
-    pub(crate) fn try_write_mut(&mut self) -> Result<&mut yrs::TransactionMut<'static>, Error> {
-        use DynTransaction::*;
-        match self.try_get_mut()? {
-            Write(trans) => Ok(trans),
-            WriteRef(_) | Read(_) => Err(Error::Other("Transaction is readonly".into())),
-        }
-    }
-
-    pub(crate) fn try_write(&self) -> Result<&yrs::TransactionMut<'static>, Error> {
-        use DynTransaction::*;
-        match self.try_get()? {
-            Write(trans) | &WriteRef(trans) => Ok(trans),
-            Read(_) => Err(Error::Other("Transaction is readonly".into())),
+    fn try_write_mut(&mut self) -> Result<&mut yrs::TransactionMut<'static>, Error> {
+        match &mut self.transaction {
+            Some(TransactionOrigin::Owned(t)) => match &mut t.transaction {
+                OwnedTransaction::Write(t) => Ok(t),
+                OwnedTransaction::Read(_) => Err(Error::Other("Transaction is readonly".into())),
+            },
+            Some(TransactionOrigin::Ref(_)) => Err(Error::Other("Transaction is readonly".into())),
+            None => Err(Error::Other("Transaction was dropped".into())),
         }
     }
 }
@@ -101,85 +172,74 @@ impl Transaction {
         let doc_inner: &yrs::Doc = (*doc).as_ref();
         let transaction = match (mutable, origin) {
             (true, Nullable::NotNull(o)) => {
-                DynTransaction::Write(doc_inner.transact_mut_with(o.0.clone()))
+                OwnedTransaction::Write(doc_inner.transact_mut_with(o.0.clone()))
             }
-            (true, Nullable::Null) => DynTransaction::Write(doc_inner.transact_mut()),
-            (false, _) => DynTransaction::Read(doc_inner.transact()),
+            (true, Nullable::Null) => OwnedTransaction::Write(doc_inner.transact_mut()),
+            (false, _) => OwnedTransaction::Read(doc_inner.transact()),
         };
 
-        // Safety: Doc lives in R memory and is kept alive by the `owner` field of this struct.
-        // R's GC is non-moving, so the pointer inside the transaction remains valid as long as
-        // the Doc is not freed. `owner: Robj` prevents collection via R_PreserveObject semantics.
+        // Safety: Doc lives in R memory and is kept alive by the `owner` Robj in
+        // OwnedInnerTransaction. R's GC is non-moving, so the pointer inside the transaction
+        // remains valid as long as the Doc is not freed. The Robj prevents collection via
+        // R_PreserveObject semantics. The transaction field drops before the owner (declaration
+        // order), so the Doc is still alive when the transaction releases its lock.
         let transaction = unsafe {
-            std::mem::transmute::<DynTransaction<'_>, DynTransaction<'static>>(transaction)
+            std::mem::transmute::<OwnedTransaction<'_>, OwnedTransaction<'static>>(transaction)
         };
         Transaction {
-            owner: doc.into(),
-            transaction: std::mem::ManuallyDrop::new(Some(transaction)),
+            transaction: Some(TransactionOrigin::Owned(OwnedYokedTransaction {
+                transaction,
+                owner: doc.into(),
+            })),
         }
     }
 
     pub fn is_mutable(&self) -> Result<bool, Error> {
-        use DynTransaction::*;
-        match self.try_get()? {
-            Write(_) | WriteRef(_) => Ok(true),
-            Read(_) => Ok(false),
-        }
+        ExtendrTransaction::is_mutable(self)
     }
 
     pub fn origin(&self) -> Result<Robj, Error> {
-        use DynTransaction::*;
-        match self.try_get()? {
-            Write(trans) | &WriteRef(trans) => match trans.origin() {
-                Some(o) => Ok(Origin(o.clone()).into()),
-                None => Ok(r!(NULL)),
-            },
-            Read(_) => Ok(r!(NULL)),
-        }
+        ExtendrTransaction::origin(self)
     }
 
     pub fn commit(&mut self) -> Result<(), Error> {
-        self.try_write_mut().map(|trans| trans.commit())
+        ExtendrTransaction::commit(self)
     }
 
     pub fn unlock(&mut self) {
-        *self.transaction = None;
+        self.transaction = None;
     }
 
     pub fn state_vector(&self) -> Result<StateVector, Error> {
-        try_read!(self, t => t.state_vector().into())
+        ExtendrTransaction::state_vector(self)
     }
 
     pub fn encode_diff_v1(&self, state_vector: &StateVector) -> Result<Vec<u8>, Error> {
-        try_read!(self, t => t.encode_diff_v1(state_vector.as_ref()))
+        ExtendrTransaction::encode_diff_v1(self, state_vector)
     }
 
     pub fn encode_diff_v2(&self, state_vector: &StateVector) -> Result<Vec<u8>, Error> {
-        try_read!(self, t => t.encode_diff_v2(state_vector.as_ref()))
+        ExtendrTransaction::encode_diff_v2(self, state_vector)
     }
 
     pub fn encode_state_as_update_v1(&self, state_vector: &StateVector) -> Result<Vec<u8>, Error> {
-        try_read!(self, t => t.encode_state_as_update_v1(state_vector.as_ref()))
+        ExtendrTransaction::encode_state_as_update_v1(self, state_vector)
     }
 
     pub fn encode_state_as_update_v2(&self, state_vector: &StateVector) -> Result<Vec<u8>, Error> {
-        try_read!(self, t => t.encode_state_as_update_v2(state_vector.as_ref()))
+        ExtendrTransaction::encode_state_as_update_v2(self, state_vector)
     }
 
     pub fn apply_update_v1(&mut self, data: &[u8]) -> Result<(), Error> {
-        let trans = self.try_write_mut()?;
-        let update = yrs::Update::decode_v1(data).extendr()?;
-        trans.apply_update(update).extendr()
+        ExtendrTransaction::apply_update_v1(self, data)
     }
 
     pub fn apply_update_v2(&mut self, data: &[u8]) -> Result<(), Error> {
-        let trans = self.try_write_mut()?;
-        let update = yrs::Update::decode_v2(data).extendr()?;
-        trans.apply_update(update).extendr()
+        ExtendrTransaction::apply_update_v2(self, data)
     }
 
     pub fn snapshot(&self) -> Result<Snapshot, Error> {
-        try_read!(self, t => t.snapshot().into())
+        ExtendrTransaction::snapshot(self)
     }
 }
 

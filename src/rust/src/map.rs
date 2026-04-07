@@ -7,7 +7,7 @@ use yrs::{
 use crate::event::ExtendrObservable;
 use crate::type_conversion::{FromExtendr, IntoExtendr};
 use crate::utils::{self, lifetime, ExtendrRef};
-use crate::{try_read, ArrayRef, TextRef, Transaction};
+use crate::{try_read, ArrayRef, ExtendrTransaction, TextRef, Transaction};
 
 utils::extendr_struct!(#[extendr] pub MapRef(yrs::MapRef));
 

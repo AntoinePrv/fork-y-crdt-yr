@@ -5,7 +5,7 @@ use yrs::{GetString as YGetString, Text as YText};
 use crate::event::ExtendrObservable;
 use crate::type_conversion::IntoExtendr;
 use crate::utils::{self, lifetime, ExtendrRef};
-use crate::{try_read, Transaction};
+use crate::{try_read, ExtendrTransaction, Transaction};
 
 utils::extendr_struct!(#[extendr] pub TextRef(yrs::TextRef));
 
