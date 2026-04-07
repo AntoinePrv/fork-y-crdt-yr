@@ -39,6 +39,8 @@ macro_rules! impl_safe_int {
     )*};
 }
 
+/// Convert integers to R with error if R's i32 cannot store the integer.
+/// The default behaviour is to approximate it to a float.
 macro_rules! impl_checked_int {
     ($($t:ty),*) => {$(
         impl IntoExtendr<Robj> for $t {
@@ -113,6 +115,36 @@ impl IntoExtendr<Robj> for &YID {
             ("clock", self.clock.extendr()?),
         ])
         .into_robj())
+    }
+}
+
+impl FromExtendr<Robj> for YID {
+    fn from_extendr(robj: Robj) -> extendr_api::Result<Self> {
+        if !robj.is_list() || robj.len() != 2 {
+            return Err(Error::Other(format!(
+                "Expected a named list with exactly 'client' and 'clock' fields for ID, got {:?}",
+                robj.rtype()
+            )));
+        }
+        let list = robj.as_list().unwrap(); // PANIC: checked above
+        let mut client: Option<u64> = None;
+        let mut clock: Option<u32> = None;
+        for (n, v) in list.iter() {
+            match n {
+                "client" => client = Some(u64::try_from(v)?),
+                "clock" => clock = Some(u32::try_from(v)?),
+                _ => {
+                    return Err(Error::Other(
+                        "The only expected names are 'client' and 'clock'".into(),
+                    ));
+                }
+            }
+        }
+
+        Ok(YID {
+            client: client.ok_or(Error::Other("ID 'client' field is missing".into()))?,
+            clock: clock.ok_or(Error::Other("ID 'clock' field is missing".into()))?,
+        })
     }
 }
 
@@ -691,6 +723,37 @@ mod tests {
         extendr_api::test! {
             // "bold" is named but second element is not (name = "")
             assert!(YAttrs::from_extendr(R!(r#"list(bold=TRUE, 1.0)"#).unwrap()).is_err());
+        }
+    }
+
+    #[test]
+    fn test_from_id() {
+        extendr_api::test! {
+            let id = YID::from_extendr(R!(r#"list(client=1L, clock=2L)"#).unwrap()).unwrap();
+            assert_eq!(id.client, 1);
+            assert_eq!(id.clock, 2);
+        }
+    }
+
+    #[test]
+    fn test_from_id_not_a_list() {
+        extendr_api::test! {
+            assert!(YID::from_extendr(r!(42)).is_err());
+        }
+    }
+
+    #[test]
+    fn test_from_id_missing_field() {
+        extendr_api::test! {
+            assert!(YID::from_extendr(R!(r#"list(client=1L)"#).unwrap()).is_err());
+        }
+    }
+
+    #[test]
+    fn test_from_id_negative_client() {
+        extendr_api::test! {
+            // client is u64, negative integers must be rejected
+            assert!(YID::from_extendr(R!(r#"list(client=-1L, clock=2L)"#).unwrap()).is_err());
         }
     }
 }

@@ -1,7 +1,7 @@
 use extendr_api::prelude::*;
 use yrs::updates::{decoder::Decode as YDecode, encoder::Encode as YEncode};
 
-use crate::type_conversion::IntoExtendr;
+use crate::type_conversion::{FromExtendr, IntoExtendr};
 use crate::utils;
 
 utils::extendr_struct!(#[extendr] pub StateVector(yrs::StateVector));
@@ -61,7 +61,62 @@ impl StateVector {
     }
 }
 
+utils::extendr_struct!(#[extendr] pub DeleteSet(yrs::DeleteSet));
+
+#[extendr]
+impl DeleteSet {
+    fn decode_v1(data: &[u8]) -> Result<Self, Error> {
+        yrs::DeleteSet::decode_v1(data).extendr().map(Self)
+    }
+
+    fn decode_v2(data: &[u8]) -> Result<Self, Error> {
+        yrs::DeleteSet::decode_v2(data).extendr().map(Self)
+    }
+
+    fn new() -> Self {
+        Self(yrs::DeleteSet::new())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn is_deleted(&self, id: Robj) -> Result<bool, Error> {
+        let id = yrs::block::ID::from_extendr(id)?;
+        Ok(self.0.is_deleted(&id))
+    }
+
+    fn equal(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+
+    fn not_equal(&self, other: &Self) -> bool {
+        self.0.ne(&other.0)
+    }
+
+    fn encode_v1(&self) -> Vec<u8> {
+        self.0.encode_v1()
+    }
+
+    fn encode_v2(&self) -> Vec<u8> {
+        self.0.encode_v2()
+    }
+
+    fn squash(&mut self) {
+        self.0.squash()
+    }
+
+    fn merge(&mut self, other: &Self) {
+        self.0.merge(other.0.clone())
+    }
+}
+
 extendr_module! {
     mod state;
     impl StateVector;
+    impl DeleteSet;
 }

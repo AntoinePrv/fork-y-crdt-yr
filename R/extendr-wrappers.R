@@ -225,6 +225,38 @@ StateVector$encode_v2 <- function() .Call(wrap__StateVector__encode_v2, self)
 #' @export
 `[[.StateVector` <- `$.StateVector`
 
+DeleteSet <- new.env(parent = emptyenv())
+
+DeleteSet$decode_v1 <- function(data) .Call(wrap__DeleteSet__decode_v1, data)
+
+DeleteSet$decode_v2 <- function(data) .Call(wrap__DeleteSet__decode_v2, data)
+
+DeleteSet$new <- function() .Call(wrap__DeleteSet__new)
+
+DeleteSet$is_empty <- function() .Call(wrap__DeleteSet__is_empty, self)
+
+DeleteSet$len <- function() .Call(wrap__DeleteSet__len, self)
+
+DeleteSet$is_deleted <- function(id) .Call(wrap__DeleteSet__is_deleted, self, id)
+
+DeleteSet$equal <- function(other) .Call(wrap__DeleteSet__equal, self, other)
+
+DeleteSet$not_equal <- function(other) .Call(wrap__DeleteSet__not_equal, self, other)
+
+DeleteSet$encode_v1 <- function() .Call(wrap__DeleteSet__encode_v1, self)
+
+DeleteSet$encode_v2 <- function() .Call(wrap__DeleteSet__encode_v2, self)
+
+DeleteSet$squash <- function() .Call(wrap__DeleteSet__squash, self)
+
+DeleteSet$merge <- function(other) .Call(wrap__DeleteSet__merge, self, other)
+
+#' @export
+`$.DeleteSet` <- function (self, name) { func <- DeleteSet[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.DeleteSet` <- `$.DeleteSet`
+
 TextRef <- new.env(parent = emptyenv())
 
 TextRef$len <- function(transaction) .Call(wrap__TextRef__len, self, transaction)
