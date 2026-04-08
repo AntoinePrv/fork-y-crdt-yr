@@ -48,7 +48,7 @@ repos:
         pass_filenames: false
       - id: pixi-check-clippy
         name: "Run clippy through pixi"
-        entry: pixi run check-clippy --allow-dirty
+        entry: pixi run check-clippy
         language: system
         types_or: [rust]
         pass_filenames: false

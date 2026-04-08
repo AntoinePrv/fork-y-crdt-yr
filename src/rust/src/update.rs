@@ -49,6 +49,8 @@ impl Update {
         self.0.state_vector_lower().into()
     }
 
+    // Method must be explicitly visible by extendr to be bound to R.
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         self.0.to_string()
     }

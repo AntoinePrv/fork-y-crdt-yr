@@ -50,6 +50,7 @@ unsafe impl CloneStableDeref for ExtendrDoc {}
 /// We heavily rely on enums to avoid having to to bind multiple different classes for
 /// transaction and borrowed transaction.
 #[extendr]
+#[allow(clippy::large_enum_variant)]
 pub enum Transaction {
     /// Owned transaction, carrying the [`Doc`] along as it shares a lock with it.
     /// Since this relies on [`Drop`] in rust to free the lock, but the object is
@@ -330,6 +331,8 @@ impl Origin {
         self.0.ge(&other.0)
     }
 
+    // Method must be explicitly visible by extendr to be bound to R.
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         self.0.to_string()
     }

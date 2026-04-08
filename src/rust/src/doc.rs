@@ -31,6 +31,8 @@ impl Doc {
         self.0.get_or_insert_array(name).into()
     }
 
+    // Method must be explicitly visible by extendr to be bound to R.
+    #[allow(clippy::inherent_to_string)]
     fn to_string(&self) -> String {
         self.0.to_string()
     }

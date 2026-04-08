@@ -115,9 +115,8 @@ cargo --locked check \
 env.RUSTFLAGS = "-Dwarnings"
 
 [feature.check.tasks.check-clippy]
-cmd = """
-cargo --locked clippy --manifest-path=src/rust/Cargo.toml --fix --allow-staged
-"""
+# --fix flag causes pixi to not return an error, failing pre-commit
+cmd = """cargo --locked clippy --manifest-path=src/rust/Cargo.toml"""
 env.RUSTFLAGS = "-Dwarnings"
 env.CARGO_TARGET_DIR = "$PIXI_PROJECT_ROOT/target/clippy"
 
